@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mammogram Savings Calculator</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 15px; }
+    label { display: block; margin-top: 12px; }
+    input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+    button { margin-top: 16px; padding: 10px 16px; cursor: pointer; }
+    .results { margin-top: 24px; padding: 16px; border: 1px solid #ddd; border-radius: 6px; }
+  </style>
+</head>
+<body>
+
+  <h1>Mammogram Savings Calculator</h1>
+  <p>Estimate the financial impact of screening mammograms in your community using a simple national average savings per mammogram.</p>
+
+  <form id="calculatorForm" onsubmit="event.preventDefault(); calculateSavings();">
+    <label for="numMammos">
+      Number of screening mammograms performed (in your chosen time period)
+    </label>
+    <input type="number" id="numMammos" min="0" step="1" required>
+
+    <label for="costPerMammo">
+      Average cost per mammogram to your clinic (USD)
+    </label>
+    <input type="number" id="costPerMammo" min="0" step="0.01" required>
+
+    <label for="zipCode">
+      Clinic ZIP code
+    </label>
+    <input type="text" id="zipCode" maxlength="10" required>
+
+    <button type="submit">Calculate Estimated Savings</button>
+  </form>
+
+  <div id="results" class="results" style="display:none;"></div>
+
+  <script>
+    // Conservative placeholder estimate based on published cost-effectiveness analyses:
+    // Change this constant as you refine the literature-based value.
+    const ESTIMATED_SAVINGS_PER_MAMMO = 50; // USD per mammogram (placeholder)
+
+    function formatCurrency(value) {
+      return value.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0
+      });
+    }
+
+    function calculateSavings() {
+      const numMammos = parseFloat(document.getElementById("numMammos").value) || 0;
+      const costPerMammo = parseFloat(document.getElementById("costPerMammo").value) || 0;
+      const zipCode = document.getElementById("zipCode").value.trim();
+
+      if (numMammos <= 0 || costPerMammo < 0 || !zipCode) {
+        alert("Please enter valid values for all fields.");
+        return;
+      }
+
+      const totalClinicalSavings = numMammos * ESTIMATED_SAVINGS_PER_MAMMO;
+      const programCost = numMammos * costPerMammo;
+      const netSavings = totalClinicalSavings - programCost;
+      const roiRatio = programCost > 0 ? (totalClinicalSavings / programCost) : 0;
+
+      const resultsDiv = document.getElementById("results");
+      resultsDiv.style.display = "block";
+
+      resultsDiv.innerHTML = `
+        <h2>Estimated Impact for ZIP ${zipCode}</h2>
+        <p><strong>Total estimated treatment-cost savings</strong>: ${formatCurrency(totalClinicalSavings)}</p>
+        <p><strong>Estimated program cost</strong>: ${formatCurrency(programCost)}</p>
+        <p><strong>Estimated net savings</strong>: ${formatCurrency(netSavings)}</p>
+        <p><strong>Estimated ROI</strong>: For every \$1 spent on mammograms, approximately \$${roiRatio.toFixed(2)} is saved in treatment costs.</p>
+        <p style="font-size: 0.85em; color: #555;">
+          Note: This is an illustrative estimate using a national average savings per mammogram. 
+          It does not use individual patient data and should not be interpreted as a substitute for a full actuarial analysis.
+        </p>
+      `;
+    }
+  </script>
+
+</body>
+</html>
