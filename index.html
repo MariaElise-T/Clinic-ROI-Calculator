@@ -1,5 +1,3 @@
-<script src="services-config.js"></script>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,6 +20,9 @@
     .service-row select { flex: 2; }
     .service-row input { flex: 1; }
   </style>
+
+  <!-- Load service assumptions -->
+  <script src="services-config.js"></script>
 </head>
 <body>
 
@@ -90,16 +91,14 @@
 </div>
 
 <script>
-  // --- CONFIG: HOURLY RATES & SERVICE VALUES (placeholder assumptions) ---
+  // Volunteer hourly rates
   const VOLUNTEER_RATES = {
-    MD: 120,   // USD/hour
+    MD: 120,
     NP: 70,
     PA: 70,
     RN: 35
   };
 
-  // Value per service in USD (conservative placeholders from prevention/diabetes literature)
-  
   // --- STEP NAVIGATION ---
   function showStep(n) {
     document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
@@ -122,29 +121,29 @@
   }
 
   // --- SERVICES UI ---
-function addServiceRow() {
-  const container = document.getElementById('servicesContainer');
-  const row = document.createElement('div');
-  row.className = 'service-row';
+  function addServiceRow() {
+    const container = document.getElementById('servicesContainer');
+    const row = document.createElement('div');
+    row.className = 'service-row';
 
-  const select = document.createElement('select');
-  SERVICE_CONFIG.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s.id;
-    opt.textContent = s.label;
-    select.appendChild(opt);
-  });
+    const select = document.createElement('select');
+    SERVICE_CONFIG.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.label;
+      select.appendChild(opt);
+    });
 
-  const input = document.createElement('input');
-  input.type = 'number';
-  input.min = '0';
-  input.step = '1';
-  input.placeholder = 'Count';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = '1';
+    input.placeholder = 'Count';
 
-  row.appendChild(select);
-  row.appendChild(input);
-  container.appendChild(row);
-}
+    row.appendChild(select);
+    row.appendChild(input);
+    container.appendChild(row);
+  }
 
   // Start with one service row by default
   addServiceRow();
@@ -167,145 +166,4 @@ function addServiceRow() {
     const hoursMD = parseFloat(document.getElementById('hoursMD').value) || 0;
     const hoursNP = parseFloat(document.getElementById('hoursNP').value) || 0;
     const hoursPA = parseFloat(document.getElementById('hoursPA').value) || 0;
-    const hoursRN = parseFloat(document.getElementById('hoursRN').value) || 0;
-
-    const valueMD = hoursMD * VOLUNTEER_RATES.MD;
-    const valueNP = hoursNP * VOLUNTEER_RATES.NP;
-    const valuePA = hoursPA * VOLUNTEER_RATES.PA;
-    const valueRN = hoursRN * VOLUNTEER_RATES.RN;
-
-    const totalVolunteerHours = hoursMD + hoursNP + hoursPA + hoursRN;
-    const totalVolunteerValue = valueMD + valueNP + valuePA + valueRN;
-
-    // Services
-    const rows = document.querySelectorAll('#servicesContainer .service-row');
-    let totalServiceValue = 0;
-    let serviceBreakdown = [];
-
-    rows.forEach(row => {
-      const select = row.querySelector('select');
-      const input = row.querySelector('input');
-      const count = parseInt(input.value, 10) || 0;
-      if (count <= 0) return;
-
-      const service = SERVICE_CONFIG.find(s => s.id === select.value);
-      if (!service) return;
-      
-      const value = count * service.valueUSD;
-      totalServiceValue += value;
-      serviceBreakdown.push({
-        id: service.id,
-        label: service.label,
-        count: count,
-        value: value,
-        rationale: service.rationale,
-        sources: service.sources
-      });
-    });
-
-    const grandTotal = totalVolunteerValue + totalServiceValue;
-
-    // Simple “equivalent admissions avoided” (assume 10k per admission)
-    const assumedAdmissionCost = 10000;
-    const equivalentAdmissions = grandTotal / assumedAdmissionCost;
-
-    if (serviceBreakdown.length > 0) {
-  html += `
-    <div class="card">
-      <h3>Service value assumptions used in this estimate</h3>
-      <table style="width:100%; border-collapse: collapse; font-size: 0.9em;">
-        <thead>
-          <tr>
-            <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Service</th>
-            <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Value per service (USD)</th>
-            <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Rationale</th>
-            <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Sources</th>
-          </tr>
-        </thead>
-        <tbody>
-  `;
-
-  serviceBreakdown.forEach(s => {
-    html += `
-      <tr>
-        <td style="border-bottom:1px solid #eee; padding:4px;">${s.label}</td>
-        <td style="border-bottom:1px solid #eee; padding:4px;">${formatCurrency(s.value / s.count)}</td>
-        <td style="border-bottom:1px solid #eee; padding:4px;">${s.rationale}</td>
-        <td style="border-bottom:1px solid #eee; padding:4px;">${s.sources}</td>
-      </tr>
-    `;
-  });
-
-  html += `
-        </tbody>
-      </table>
-      <p style="font-size:0.8em;color:#555;margin-top:8px;">
-        These are conservative long‑term system savings estimates per service. They summarize published economic and cost‑effectiveness studies, and are meant for advocacy and planning, not pricing or reimbursement decisions.[web:49][web:55][web:78]
-      </p>
-    </div>
-  `;
-}
-
-    // Build results HTML
-    const results = document.getElementById('resultsArea');
-    const clinicLabel = clinicName ? clinicName : "Your clinic";
-
-    let html = `
-      <div class="card hero">
-        <h2>${clinicLabel} impact in ZIP ${zip}</h2>
-        <p>Estimated annual economic value created:</p>
-        <p style="font-size: 2em; font-weight: bold;">${formatCurrency(grandTotal)}</p>
-      </div>
-
-      <div class="flex">
-        <div class="card">
-          <h3>Volunteer clinical time</h3>
-          <p>Total volunteer hours: ${totalVolunteerHours.toFixed(1)}</p>
-          <ul>
-            <li>MD/DO: ${hoursMD.toFixed(1)} hrs → ${formatCurrency(valueMD)}</li>
-            <li>NP: ${hoursNP.toFixed(1)} hrs → ${formatCurrency(valueNP)}</li>
-            <li>PA: ${hoursPA.toFixed(1)} hrs → ${formatCurrency(valuePA)}</li>
-            <li>RN: ${hoursRN.toFixed(1)} hrs → ${formatCurrency(valueRN)}</li>
-          </ul>
-          <p><strong>Total value of donated clinical time: ${formatCurrency(totalVolunteerValue)}</strong></p>
-        </div>
-
-        <div class="card">
-          <h3>Preventive & chronic care services</h3>
-    `;
-
-    if (serviceBreakdown.length === 0) {
-      html += `<p>No service counts were entered.</p>`;
-    } else {
-      html += `<ul>`;
-      serviceBreakdown.forEach(s => {
-        html += `<li>${s.count} × ${s.label} → ${formatCurrency(s.value)}</li>`;
-      });
-      html += `</ul>`;
-      html += `<p><strong>Total value of services: ${formatCurrency(totalServiceValue)}</strong></p>`;
-    }
-
-    html += `
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Community impact snapshot</h3>
-        <p>Approximate equivalent of <strong>${equivalentAdmissions.toFixed(1)}</strong> avoided hospital admissions (assuming ${formatCurrency(assumedAdmissionCost)} per admission).</p>
-        <p style="font-size: 0.85em; color: #555;">
-          Estimates are illustrative and use national-average values for volunteer time and long-term healthcare cost savings per service. 
-          They do not reflect claims data or immediate cash flow.
-        </p>
-      </div>
-    `;
-
-    results.innerHTML = html;
-    showStep(4);
-  }
-</script>
-
-</body>
-</html>
-
-</body>
-</html>
+    const hoursRN = parseFloat(document.getEle
