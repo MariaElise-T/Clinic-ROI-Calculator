@@ -2,85 +2,277 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Mammogram Savings Calculator</title>
+  <title>Clinic Impact Estimator</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 15px; }
-    label { display: block; margin-top: 12px; }
-    input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
-    button { margin-top: 16px; padding: 10px 16px; cursor: pointer; }
-    .results { margin-top: 24px; padding: 16px; border: 1px solid #ddd; border-radius: 6px; }
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 16px; }
+    .step { display: none; }
+    .step.active { display: block; }
+    .buttons { margin-top: 20px; }
+    button { padding: 8px 14px; margin-right: 8px; cursor: pointer; }
+    label { display: block; margin-top: 10px; }
+    input, select { width: 100%; padding: 6px; margin-top: 4px; box-sizing: border-box; }
+    .card { border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-top: 16px; }
+    .hero { background: #f3f7ff; border-color: #c5d4ff; text-align: center; }
+    .hero h2 { margin: 0 0 8px 0; font-size: 1.8em; }
+    .flex { display: flex; gap: 16px; flex-wrap: wrap; }
+    .flex .card { flex: 1 1 220px; }
+    .service-row { display: flex; gap: 8px; margin-top: 8px; }
+    .service-row select { flex: 2; }
+    .service-row input { flex: 1; }
   </style>
 </head>
 <body>
 
-  <h1>Mammogram Savings Calculator</h1>
-  <p>Estimate the financial impact of screening mammograms in your community using a simple national average savings per mammogram.</p>
+<h1>Clinic Impact Estimator</h1>
+<p>This guided tool estimates the economic value of volunteer time and key services. No patient-level data is collected.</p>
 
-  <form id="calculatorForm" onsubmit="event.preventDefault(); calculateSavings();">
-    <label for="numMammos">
-      Number of screening mammograms performed (in your chosen time period)
-    </label>
-    <input type="number" id="numMammos" min="0" step="1" required>
+<!-- STEP 1: CLINIC INFO -->
+<div id="step-1" class="step active">
+  <h2>Step 1: Clinic Information</h2>
+  <label for="clinicName">Clinic name (optional)</label>
+  <input id="clinicName" type="text">
 
-    <label for="costPerMammo">
-      Average cost per mammogram to your clinic (USD)
-    </label>
-    <input type="number" id="costPerMammo" min="0" step="0.01" required>
+  <label for="zipCode">Clinic ZIP code</label>
+  <input id="zipCode" type="text" maxlength="10" required>
 
-    <label for="zipCode">
-      Clinic ZIP code
-    </label>
-    <input type="text" id="zipCode" maxlength="10" required>
+  <div class="buttons">
+    <button onclick="nextStep(1)">Next: Volunteer Time</button>
+  </div>
+</div>
 
-    <button type="submit">Calculate Estimated Savings</button>
-  </form>
+<!-- STEP 2: VOLUNTEER HOURS -->
+<div id="step-2" class="step">
+  <h2>Step 2: Volunteer Clinical Time</h2>
+  <p>Enter approximate volunteer hours in the last 12 months.</p>
 
-  <div id="results" class="results" style="display:none;"></div>
+  <label for="hoursMD">MD / DO hours</label>
+  <input id="hoursMD" type="number" min="0" step="0.1">
 
-  <script>
-    // Conservative placeholder estimate based on published cost-effectiveness analyses:
-    // Change this constant as you refine the literature-based value.
-    const ESTIMATED_SAVINGS_PER_MAMMO = 50; // USD per mammogram (placeholder)
+  <label for="hoursNP">NP hours</label>
+  <input id="hoursNP" type="number" min="0" step="0.1">
 
-    function formatCurrency(value) {
-      return value.toLocaleString("en-US", {
-        style: "currency",
-        currency: "USD",
-        maximumFractionDigits: 0
-      });
-    }
+  <label for="hoursPA">PA hours</label>
+  <input id="hoursPA" type="number" min="0" step="0.1">
 
-    function calculateSavings() {
-      const numMammos = parseFloat(document.getElementById("numMammos").value) || 0;
-      const costPerMammo = parseFloat(document.getElementById("costPerMammo").value) || 0;
-      const zipCode = document.getElementById("zipCode").value.trim();
+  <label for="hoursRN">RN hours</label>
+  <input id="hoursRN" type="number" min="0" step="0.1">
 
-      if (numMammos <= 0 || costPerMammo < 0 || !zipCode) {
-        alert("Please enter valid values for all fields.");
+  <div class="buttons">
+    <button onclick="prevStep(2)">Back</button>
+    <button onclick="nextStep(2)">Next: Clinical Services</button>
+  </div>
+</div>
+
+<!-- STEP 3: SERVICES -->
+<div id="step-3" class="step">
+  <h2>Step 3: Clinical Services Delivered</h2>
+  <p>Add services and enter how many you delivered in the last 12 months.</p>
+
+  <div id="servicesContainer"></div>
+  <button type="button" onclick="addServiceRow()">+ Add service</button>
+
+  <div class="buttons">
+    <button onclick="prevStep(3)">Back</button>
+    <button onclick="calculateAndShowResults()">See Impact Summary</button>
+  </div>
+</div>
+
+<!-- STEP 4: RESULTS -->
+<div id="step-4" class="step">
+  <h2>Impact Summary</h2>
+  <div id="resultsArea"></div>
+
+  <div class="buttons">
+    <button onclick="prevStep(4)">Back</button>
+  </div>
+</div>
+
+<script>
+  // --- CONFIG: HOURLY RATES & SERVICE VALUES (placeholder assumptions) ---
+  const VOLUNTEER_RATES = {
+    MD: 120,   // USD/hour
+    NP: 70,
+    PA: 70,
+    RN: 35
+  };
+
+  // Value per service in USD (conservative placeholders from prevention/diabetes literature)
+  const SERVICES = [
+    { id: "diabetes_visit", label: "Diabetes management visit", value: 100 },
+    { id: "htn_visit",      label: "Hypertension management visit", value: 75 },
+    { id: "mammogram",      label: "Mammogram (screening)", value: 75 },
+    { id: "pap_smear",      label: "Pap smear", value: 75 },
+    { id: "lipid_panel",    label: "Cholesterol / lipid screening", value: 60 },
+    { id: "fit_test",       label: "Colon cancer screening (FIT/FOBT)", value: 150 },
+    { id: "colonoscopy",    label: "Colon cancer screening colonoscopy", value: 500 }
+  ];
+
+  // --- STEP NAVIGATION ---
+  function showStep(n) {
+    document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
+    document.getElementById(`step-${n}`).classList.add('active');
+  }
+
+  function nextStep(current) {
+    if (current === 1) {
+      const zip = document.getElementById('zipCode').value.trim();
+      if (!zip) {
+        alert("Please enter a ZIP code.");
         return;
       }
-
-      const totalClinicalSavings = numMammos * ESTIMATED_SAVINGS_PER_MAMMO;
-      const programCost = numMammos * costPerMammo;
-      const netSavings = totalClinicalSavings - programCost;
-      const roiRatio = programCost > 0 ? (totalClinicalSavings / programCost) : 0;
-
-      const resultsDiv = document.getElementById("results");
-      resultsDiv.style.display = "block";
-
-      resultsDiv.innerHTML = `
-        <h2>Estimated Impact for ZIP ${zipCode}</h2>
-        <p><strong>Total estimated treatment-cost savings</strong>: ${formatCurrency(totalClinicalSavings)}</p>
-        <p><strong>Estimated program cost</strong>: ${formatCurrency(programCost)}</p>
-        <p><strong>Estimated net savings</strong>: ${formatCurrency(netSavings)}</p>
-        <p><strong>Estimated ROI</strong>: For every \$1 spent on mammograms, approximately \$${roiRatio.toFixed(2)} is saved in treatment costs.</p>
-        <p style="font-size: 0.85em; color: #555;">
-          Note: This is an illustrative estimate using a national average savings per mammogram. 
-          It does not use individual patient data and should not be interpreted as a substitute for a full actuarial analysis.
-        </p>
-      `;
     }
-  </script>
+    showStep(current + 1);
+  }
+
+  function prevStep(current) {
+    showStep(current - 1);
+  }
+
+  // --- SERVICES UI ---
+  function addServiceRow() {
+    const container = document.getElementById('servicesContainer');
+    const row = document.createElement('div');
+    row.className = 'service-row';
+
+    const select = document.createElement('select');
+    SERVICES.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.label;
+      select.appendChild(opt);
+    });
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = '1';
+    input.placeholder = 'Count';
+
+    row.appendChild(select);
+    row.appendChild(input);
+    container.appendChild(row);
+  }
+
+  // Start with one service row by default
+  addServiceRow();
+
+  // --- CALCULATION & RESULTS ---
+  function formatCurrency(value) {
+    return value.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0
+    });
+  }
+
+  function calculateAndShowResults() {
+    // Clinic info
+    const clinicName = document.getElementById('clinicName').value.trim();
+    const zip = document.getElementById('zipCode').value.trim();
+
+    // Volunteer hours
+    const hoursMD = parseFloat(document.getElementById('hoursMD').value) || 0;
+    const hoursNP = parseFloat(document.getElementById('hoursNP').value) || 0;
+    const hoursPA = parseFloat(document.getElementById('hoursPA').value) || 0;
+    const hoursRN = parseFloat(document.getElementById('hoursRN').value) || 0;
+
+    const valueMD = hoursMD * VOLUNTEER_RATES.MD;
+    const valueNP = hoursNP * VOLUNTEER_RATES.NP;
+    const valuePA = hoursPA * VOLUNTEER_RATES.PA;
+    const valueRN = hoursRN * VOLUNTEER_RATES.RN;
+
+    const totalVolunteerHours = hoursMD + hoursNP + hoursPA + hoursRN;
+    const totalVolunteerValue = valueMD + valueNP + valuePA + valueRN;
+
+    // Services
+    const rows = document.querySelectorAll('#servicesContainer .service-row');
+    let totalServiceValue = 0;
+    let serviceBreakdown = [];
+
+    rows.forEach(row => {
+      const select = row.querySelector('select');
+      const input = row.querySelector('input');
+      const count = parseInt(input.value, 10) || 0;
+      if (count <= 0) return;
+
+      const service = SERVICES.find(s => s.id === select.value);
+      if (!service) return;
+
+      const value = count * service.value;
+      totalServiceValue += value;
+      serviceBreakdown.push({
+        label: service.label,
+        count: count,
+        value: value
+      });
+    });
+
+    const grandTotal = totalVolunteerValue + totalServiceValue;
+
+    // Simple “equivalent admissions avoided” (assume 10k per admission)
+    const assumedAdmissionCost = 10000;
+    const equivalentAdmissions = grandTotal / assumedAdmissionCost;
+
+    // Build results HTML
+    const results = document.getElementById('resultsArea');
+    const clinicLabel = clinicName ? clinicName : "Your clinic";
+
+    let html = `
+      <div class="card hero">
+        <h2>${clinicLabel} impact in ZIP ${zip}</h2>
+        <p>Estimated annual economic value created:</p>
+        <p style="font-size: 2em; font-weight: bold;">${formatCurrency(grandTotal)}</p>
+      </div>
+
+      <div class="flex">
+        <div class="card">
+          <h3>Volunteer clinical time</h3>
+          <p>Total volunteer hours: ${totalVolunteerHours.toFixed(1)}</p>
+          <ul>
+            <li>MD/DO: ${hoursMD.toFixed(1)} hrs → ${formatCurrency(valueMD)}</li>
+            <li>NP: ${hoursNP.toFixed(1)} hrs → ${formatCurrency(valueNP)}</li>
+            <li>PA: ${hoursPA.toFixed(1)} hrs → ${formatCurrency(valuePA)}</li>
+            <li>RN: ${hoursRN.toFixed(1)} hrs → ${formatCurrency(valueRN)}</li>
+          </ul>
+          <p><strong>Total value of donated clinical time: ${formatCurrency(totalVolunteerValue)}</strong></p>
+        </div>
+
+        <div class="card">
+          <h3>Preventive & chronic care services</h3>
+    `;
+
+    if (serviceBreakdown.length === 0) {
+      html += `<p>No service counts were entered.</p>`;
+    } else {
+      html += `<ul>`;
+      serviceBreakdown.forEach(s => {
+        html += `<li>${s.count} × ${s.label} → ${formatCurrency(s.value)}</li>`;
+      });
+      html += `</ul>`;
+      html += `<p><strong>Total value of services: ${formatCurrency(totalServiceValue)}</strong></p>`;
+    }
+
+    html += `
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Community impact snapshot</h3>
+        <p>Approximate equivalent of <strong>${equivalentAdmissions.toFixed(1)}</strong> avoided hospital admissions (assuming ${formatCurrency(assumedAdmissionCost)} per admission).</p>
+        <p style="font-size: 0.85em; color: #555;">
+          Estimates are illustrative and use national-average values for volunteer time and long-term healthcare cost savings per service. 
+          They do not reflect claims data or immediate cash flow.
+        </p>
+      </div>
+    `;
+
+    results.innerHTML = html;
+    showStep(4);
+  }
+</script>
+
+</body>
+</html>
 
 </body>
 </html>
