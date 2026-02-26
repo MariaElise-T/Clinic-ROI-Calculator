@@ -1,3 +1,5 @@
+<script src="services-config.js"></script>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -97,16 +99,7 @@
   };
 
   // Value per service in USD (conservative placeholders from prevention/diabetes literature)
-  const SERVICES = [
-    { id: "diabetes_visit", label: "Diabetes management visit", value: 100 },
-    { id: "htn_visit",      label: "Hypertension management visit", value: 75 },
-    { id: "mammogram",      label: "Mammogram (screening)", value: 75 },
-    { id: "pap_smear",      label: "Pap smear", value: 75 },
-    { id: "lipid_panel",    label: "Cholesterol / lipid screening", value: 60 },
-    { id: "fit_test",       label: "Colon cancer screening (FIT/FOBT)", value: 150 },
-    { id: "colonoscopy",    label: "Colon cancer screening colonoscopy", value: 500 }
-  ];
-
+  
   // --- STEP NAVIGATION ---
   function showStep(n) {
     document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
@@ -129,29 +122,29 @@
   }
 
   // --- SERVICES UI ---
-  function addServiceRow() {
-    const container = document.getElementById('servicesContainer');
-    const row = document.createElement('div');
-    row.className = 'service-row';
+function addServiceRow() {
+  const container = document.getElementById('servicesContainer');
+  const row = document.createElement('div');
+  row.className = 'service-row';
 
-    const select = document.createElement('select');
-    SERVICES.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s.id;
-      opt.textContent = s.label;
-      select.appendChild(opt);
-    });
+  const select = document.createElement('select');
+  SERVICE_CONFIG.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.label;
+    select.appendChild(opt);
+  });
 
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '0';
-    input.step = '1';
-    input.placeholder = 'Count';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '1';
+  input.placeholder = 'Count';
 
-    row.appendChild(select);
-    row.appendChild(input);
-    container.appendChild(row);
-  }
+  row.appendChild(select);
+  row.appendChild(input);
+  container.appendChild(row);
+}
 
   // Start with one service row by default
   addServiceRow();
@@ -195,15 +188,18 @@
       const count = parseInt(input.value, 10) || 0;
       if (count <= 0) return;
 
-      const service = SERVICES.find(s => s.id === select.value);
+      const service = SERVICE_CONFIG.find(s => s.id === select.value);
       if (!service) return;
-
-      const value = count * service.value;
+      
+      const value = count * service.valueUSD;
       totalServiceValue += value;
       serviceBreakdown.push({
+        id: service.id,
         label: service.label,
         count: count,
-        value: value
+        value: value,
+        rationale: service.rationale,
+        sources: service.sources
       });
     });
 
@@ -212,6 +208,43 @@
     // Simple “equivalent admissions avoided” (assume 10k per admission)
     const assumedAdmissionCost = 10000;
     const equivalentAdmissions = grandTotal / assumedAdmissionCost;
+
+    if (serviceBreakdown.length > 0) {
+  html += `
+    <div class="card">
+      <h3>Service value assumptions used in this estimate</h3>
+      <table style="width:100%; border-collapse: collapse; font-size: 0.9em;">
+        <thead>
+          <tr>
+            <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Service</th>
+            <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Value per service (USD)</th>
+            <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Rationale</th>
+            <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Sources</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  serviceBreakdown.forEach(s => {
+    html += `
+      <tr>
+        <td style="border-bottom:1px solid #eee; padding:4px;">${s.label}</td>
+        <td style="border-bottom:1px solid #eee; padding:4px;">${formatCurrency(s.value / s.count)}</td>
+        <td style="border-bottom:1px solid #eee; padding:4px;">${s.rationale}</td>
+        <td style="border-bottom:1px solid #eee; padding:4px;">${s.sources}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+      <p style="font-size:0.8em;color:#555;margin-top:8px;">
+        These are conservative long‑term system savings estimates per service. They summarize published economic and cost‑effectiveness studies, and are meant for advocacy and planning, not pricing or reimbursement decisions.[web:49][web:55][web:78]
+      </p>
+    </div>
+  `;
+}
 
     // Build results HTML
     const results = document.getElementById('resultsArea');
