@@ -19,15 +19,32 @@
     .service-row { display: flex; gap: 8px; margin-top: 8px; }
     .service-row select { flex: 2; }
     .service-row input { flex: 1; }
+    .mode-note { font-size: 0.9em; color: #555; margin-top: 4px; }
   </style>
 
-  <!-- Load service assumptions -->
+  <!-- Load config (services + volunteer roles) -->
   <script src="services-config.js"></script>
 </head>
 <body>
 
 <h1>Clinic Impact Estimator</h1>
-<p>This guided tool estimates the economic value of volunteer time and key services. No patient-level data is collected.</p>
+<p>This guided tool estimates the value of volunteer time or the value of services using Medicare payment rates. No patient-level data is collected.</p>
+
+<!-- MODE SELECTOR -->
+<div class="card">
+  <h2>Choose calculation mode</h2>
+  <label>
+    <input type="radio" name="mode" value="volunteer" checked onchange="onModeChange()">
+    Volunteer time value (by role & hours)
+  </label>
+  <label>
+    <input type="radio" name="mode" value="medicare" onchange="onModeChange()">
+    Value by Medicare reimbursement (per service)
+  </label>
+  <p id="modeDescription" class="mode-note">
+    In this mode, we'll value donated clinical time using typical hourly replacement cost for each credential.
+  </p>
+</div>
 
 <!-- STEP 1: CLINIC INFO -->
 <div id="step-1" class="step active">
@@ -35,30 +52,27 @@
   <label for="clinicName">Clinic name (optional)</label>
   <input id="clinicName" type="text">
 
-  <label for="zipCode">Clinic ZIP code</label>
-  <input id="zipCode" type="text" maxlength="10" required>
-
   <div class="buttons">
-    <button onclick="nextStep(1)">Next: Volunteer Time</button>
+    <button onclick="nextStep(1)">Next</button>
   </div>
 </div>
 
-<!-- STEP 2: VOLUNTEER HOURS -->
+<!-- STEP 2: VOLUNTEER HOURS (only used in volunteer mode) -->
 <div id="step-2" class="step">
   <h2>Step 2: Volunteer Clinical Time</h2>
   <p>Enter approximate volunteer hours in the last 12 months.</p>
 
-  <label for="hoursMD">MD / DO hours</label>
-  <input id="hoursMD" type="number" min="0" step="0.1">
-
-  <label for="hoursNP">NP hours</label>
-  <input id="hoursNP" type="number" min="0" step="0.1">
-
-  <label for="hoursPA">PA hours</label>
-  <input id="hoursPA" type="number" min="0" step="0.1">
+  <label for="hoursUnlicensed">Unlicensed volunteer hours</label>
+  <input id="hoursUnlicensed" type="number" min="0" step="0.1">
 
   <label for="hoursRN">RN hours</label>
   <input id="hoursRN" type="number" min="0" step="0.1">
+
+  <label for="hoursNPPA">NP / PA hours</label>
+  <input id="hoursNPPA" type="number" min="0" step="0.1">
+
+  <label for="hoursMD">MD / DO hours</label>
+  <input id="hoursMD" type="number" min="0" step="0.1">
 
   <div class="buttons">
     <button onclick="prevStep(2)">Back</button>
@@ -91,13 +105,25 @@
 </div>
 
 <script>
-  // Volunteer hourly rates
-  const VOLUNTEER_RATES = {
-    MD: 120,
-    NP: 70,
-    PA: 70,
-    RN: 35
-  };
+  // --- STATE ---
+  let currentMode = "volunteer"; // "volunteer" or "medicare"
+
+  function getMode() {
+    const checked = document.querySelector('input[name="mode"]:checked');
+    return checked ? checked.value : "volunteer";
+  }
+
+  function onModeChange() {
+    currentMode = getMode();
+    const desc = document.getElementById("modeDescription");
+    if (currentMode === "volunteer") {
+      desc.textContent =
+        "In this mode, we'll value donated clinical time using typical hourly replacement cost for each credential.";
+    } else {
+      desc.textContent =
+        "In this mode, we'll value services at approximate national Medicare payment rates for selected CPT/HCPCS codes.";
+    }
+  }
 
   // --- STEP NAVIGATION ---
   function showStep(n) {
@@ -107,9 +133,9 @@
 
   function nextStep(current) {
     if (current === 1) {
-      const zip = document.getElementById('zipCode').value.trim();
-      if (!zip) {
-        alert("Please enter a ZIP code.");
+      // In Medicare mode, skip volunteer step
+      if (getMode() === "medicare") {
+        showStep(3);
         return;
       }
     }
@@ -117,6 +143,11 @@
   }
 
   function prevStep(current) {
+    if (current === 3 && getMode() === "medicare") {
+      // In Medicare mode, going back from Step 3 goes to Step 1
+      showStep(1);
+      return;
+    }
     showStep(current - 1);
   }
 
@@ -148,7 +179,7 @@
   // Start with one service row by default
   addServiceRow();
 
-  // --- CALCULATION & RESULTS ---
+  // --- UTIL ---
   function formatCurrency(value) {
     return value.toLocaleString("en-US", {
       style: "currency",
@@ -157,26 +188,42 @@
     });
   }
 
+  // --- CALCULATION & RESULTS ---
   function calculateAndShowResults() {
+    const mode = getMode();
+
     // Clinic info
     const clinicName = document.getElementById('clinicName').value.trim();
-    const zip = document.getElementById('zipCode').value.trim();
+    const clinicLabel = clinicName ? clinicName : "Your clinic";
 
-    // Volunteer hours
-    const hoursMD = parseFloat(document.getElementById('hoursMD').value) || 0;
-    const hoursNP = parseFloat(document.getElementById('hoursNP').value) || 0;
-    const hoursPA = parseFloat(document.getElementById('hoursPA').value) || 0;
-    const hoursRN = parseFloat(document.getElementById('hoursRN').value) || 0;
+    // Volunteer mode: compute volunteer values
+    let totalVolunteerHours = 0;
+    let volunteerBreakdown = {};
+    let totalVolunteerValue = 0;
 
-    const valueMD = hoursMD * VOLUNTEER_RATES.MD;
-    const valueNP = hoursNP * VOLUNTEER_RATES.NP;
-    const valuePA = hoursPA * VOLUNTEER_RATES.PA;
-    const valueRN = hoursRN * VOLUNTEER_RATES.RN;
+    if (mode === "volunteer") {
+      const hoursUnlicensed = parseFloat(document.getElementById('hoursUnlicensed').value) || 0;
+      const hoursRN         = parseFloat(document.getElementById('hoursRN').value) || 0;
+      const hoursNPPA       = parseFloat(document.getElementById('hoursNPPA').value) || 0;
+      const hoursMD         = parseFloat(document.getElementById('hoursMD').value) || 0;
 
-    const totalVolunteerHours = hoursMD + hoursNP + hoursPA + hoursRN;
-    const totalVolunteerValue = valueMD + valueNP + valuePA + valueRN;
+      totalVolunteerHours =
+        hoursUnlicensed + hoursRN + hoursNPPA + hoursMD;
 
-    // Services
+      const valUnlicensed = hoursUnlicensed * VOLUNTEER_ROLES.unlicensed.rateUSD;
+      const valRN         = hoursRN         * VOLUNTEER_ROLES.rn.rateUSD;
+      const valNPPA       = hoursNPPA       * VOLUNTEER_ROLES.nppa.rateUSD;
+      const valMD         = hoursMD         * VOLUNTEER_ROLES.md.rateUSD;
+
+      totalVolunteerValue = valUnlicensed + valRN + valNPPA + valMD;
+
+      volunteerBreakdown = {
+        hoursUnlicensed, hoursRN, hoursNPPA, hoursMD,
+        valUnlicensed, valRN, valNPPA, valMD
+      };
+    }
+
+    // Services (used in both modes)
     const rows = document.querySelectorAll('#servicesContainer .service-row');
     let totalServiceValue = 0;
     let serviceBreakdown = [];
@@ -190,49 +237,106 @@
       const service = SERVICE_CONFIG.find(s => s.id === select.value);
       if (!service) return;
 
-      const value = count * service.valueUSD;
+      // In Medicare mode, value = count * medicareNatRate
+      // (In volunteer mode we still use Medicare rates for "value of services")
+      const perServiceValue = service.medicareNatRate;
+      const value = count * perServiceValue;
+
       totalServiceValue += value;
       serviceBreakdown.push({
         id: service.id,
         label: service.label,
+        cpt: service.cpt,
         count: count,
-        value: value,
-        rationale: service.rationale,
-        sources: service.sources
+        perServiceValue: perServiceValue,
+        value: value
       });
     });
 
-    const grandTotal = totalVolunteerValue + totalServiceValue;
-
-    // Simple “equivalent admissions avoided”
-    const assumedAdmissionCost = 10000;
-    const equivalentAdmissions = grandTotal / assumedAdmissionCost;
+    const grandTotal =
+      (mode === "volunteer" ? totalVolunteerValue : 0) + totalServiceValue;
 
     const results = document.getElementById('resultsArea');
-    const clinicLabel = clinicName ? clinicName : "Your clinic";
-
     let html = `
       <div class="card hero">
-        <h2>${clinicLabel} impact in ZIP ${zip}</h2>
-        <p>Estimated annual economic value created:</p>
+        <h2>${clinicLabel} impact</h2>
+        <p>Estimated annual value:</p>
         <p style="font-size: 2em; font-weight: bold;">${formatCurrency(grandTotal)}</p>
+        <p class="mode-note">
+          Mode: ${mode === "volunteer" ? "Volunteer time value" : "Medicare reimbursement value"}
+        </p>
       </div>
+    `;
 
-      <div class="flex">
-        <div class="card">
-          <h3>Volunteer clinical time</h3>
-          <p>Total volunteer hours: ${totalVolunteerHours.toFixed(1)}</p>
-          <ul>
-            <li>MD/DO: ${hoursMD.toFixed(1)} hrs → ${formatCurrency(valueMD)}</li>
-            <li>NP: ${hoursNP.toFixed(1)} hrs → ${formatCurrency(valueNP)}</li>
-            <li>PA: ${hoursPA.toFixed(1)} hrs → ${formatCurrency(valuePA)}</li>
-            <li>RN: ${hoursRN.toFixed(1)} hrs → ${formatCurrency(valueRN)}</li>
-          </ul>
-          <p><strong>Total value of donated clinical time: ${formatCurrency(totalVolunteerValue)}</strong></p>
-        </div>
+    if (mode === "volunteer") {
+      html += `
+        <div class="flex">
+          <div class="card">
+            <h3>Volunteer clinical time</h3>
+            <p>Total volunteer hours: ${totalVolunteerHours.toFixed(1)}</p>
+            <ul>
+              <li>Unlicensed: ${volunteerBreakdown.hoursUnlicensed.toFixed(1)} hrs → ${formatCurrency(volunteerBreakdown.valUnlicensed)}</li>
+              <li>RN: ${volunteerBreakdown.hoursRN.toFixed(1)} hrs → ${formatCurrency(volunteerBreakdown.valRN)}</li>
+              <li>NP/PA: ${volunteerBreakdown.hoursNPPA.toFixed(1)} hrs → ${formatCurrency(volunteerBreakdown.valNPPA)}</li>
+              <li>MD/DO: ${volunteerBreakdown.hoursMD.toFixed(1)} hrs → ${formatCurrency(volunteerBreakdown.valMD)}</li>
+            </ul>
+            <p><strong>Total value of donated clinical time: ${formatCurrency(totalVolunteerValue)}</strong></p>
+            <p class="mode-note" style="margin-top:8px;">
+			  <strong>Methods &amp; sources (volunteer time)</strong><br>
+			  Volunteer hours are valued using national benchmarks for the value of a volunteer hour,
+			  as reported annually by Independent Sector and the Do Good Institute. The most recent
+			  estimate places the national average value of volunteer time at about 
+			  <a href="https://independentsector.org/research/value-of-volunteer-time/" target="_blank" rel="noopener">
+				$36.14 per hour
+			  </a>, based on Bureau of Labor Statistics wage data plus fringe benefits.<br><br>
+			  In this tool, general/unlicensed volunteer time is valued slightly below that national rate,
+			  RN time is valued near the national rate, and NP/PA and physician (MD/DO) time are valued
+			  higher to approximate the replacement cost of licensed clinical work. This “replacement-cost”
+			  approach is consistent with guidance for valuing skilled volunteers in grant applications and
+			  nonprofit accounting (e.g., using higher hourly values for medical professionals than for
+			  general volunteers).<br><br>
+			  Example references:
+			  <ul>
+				<li>
+				  Independent Sector &amp; Do Good Institute – 
+				  <a href="https://independentsector.org/blog/2026-value-of-volunteer-time-release/" target="_blank" rel="noopener">
+					New Value of Volunteer Time of $36.14 Per Hour (2025 data)
+				  </a>
+				</li>
+				<li>
+				  Independent Sector – 
+				  <a href="https://independentsector.org/research/value-of-volunteer-time/" target="_blank" rel="noopener">
+					Value of Volunteer Time (national and state rates, methodology)
+				  </a>
+				</li>
+				<li>
+				  Serve.Love – 
+				  <a href="https://www.serve.love/blog/calculate-volunteer-value-grant-applications/" target="_blank" rel="noopener">
+					How to Calculate Volunteer Value for Grant Applications
+				  </a>
+				  (recommends using higher hourly values for skilled roles like medical professionals)
+				</li>
+			  </ul>
+			</p>
+          </div>
+      `;
+    } else {
+      html += `
+        <div class="flex">
+          <div class="card">
+            <h3>Volunteer clinical time</h3>
+            <p>Volunteer time is not included in this mode.</p>
+            <p class="mode-note">
+              Switch back to “Volunteer time value” mode above to estimate the dollar value of donated hours.
+            </p>
+          </div>
+      `;
+    }
 
+    // Services card
+    html += `
         <div class="card">
-          <h3>Preventive & chronic care services</h3>
+          <h3>Clinical services</h3>
     `;
 
     if (serviceBreakdown.length === 0) {
@@ -249,29 +353,20 @@
     html += `
         </div>
       </div>
-
-      <div class="card">
-        <h3>Community impact snapshot</h3>
-        <p>Approximate equivalent of <strong>${equivalentAdmissions.toFixed(1)}</strong> avoided hospital admissions (assuming ${formatCurrency(assumedAdmissionCost)} per admission).</p>
-        <p style="font-size: 0.85em; color: #555;">
-          Estimates are illustrative and use national-average values for volunteer time and long-term healthcare cost savings per service. 
-          They do not reflect claims data or immediate cash flow.
-        </p>
-      </div>
     `;
 
-    // Add assumptions table if services were entered
+    // Medicare assumptions table
     if (serviceBreakdown.length > 0) {
       html += `
         <div class="card">
-          <h3>Service value assumptions used in this estimate</h3>
+          <h3>Medicare rate assumptions used</h3>
           <table style="width:100%; border-collapse: collapse; font-size: 0.9em;">
             <thead>
               <tr>
                 <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Service</th>
-                <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Value per service (USD)</th>
-                <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Rationale</th>
-                <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Sources</th>
+                <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">CPT/HCPCS</th>
+                <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Rate per service (USD)</th>
+                <th style="border-bottom:1px solid #ccc; text-align:left; padding:4px;">Count</th>
               </tr>
             </thead>
             <tbody>
@@ -281,9 +376,9 @@
         html += `
           <tr>
             <td style="border-bottom:1px solid #eee; padding:4px;">${s.label}</td>
-            <td style="border-bottom:1px solid #eee; padding:4px;">${formatCurrency(s.value / s.count)}</td>
-            <td style="border-bottom:1px solid #eee; padding:4px;">${s.rationale}</td>
-            <td style="border-bottom:1px solid #eee; padding:4px;">${s.sources}</td>
+            <td style="border-bottom:1px solid #eee; padding:4px;">${s.cpt}</td>
+            <td style="border-bottom:1px solid #eee; padding:4px;">${formatCurrency(s.perServiceValue)}</td>
+            <td style="border-bottom:1px solid #eee; padding:4px;">${s.count}</td>
           </tr>
         `;
       });
@@ -291,8 +386,12 @@
       html += `
             </tbody>
           </table>
-          <p style="font-size:0.8em;color:#555;margin-top:8px;">
-            These are conservative long‑term system savings estimates per service. They summarize published economic and cost‑effectiveness studies, and are meant for advocacy and planning, not pricing or reimbursement decisions.
+          <p class="mode-note" style="margin-top:8px;">
+            Rates shown are approximate national Medicare Physician Fee Schedule (non-facility) payment amounts.
+            For current rates by locality and year, see the 
+            <a href="https://www.cms.gov/medicare/physician-fee-schedule/search" target="_blank" rel="noopener">
+              CMS Physician Fee Schedule lookup tool
+            </a>.
           </p>
         </div>
       `;
