@@ -1,4 +1,4 @@
-# Clinic Impact Estimator
+# Clinic Impact Estimator   
 
 A lightweight, browser-based tool to estimate the economic impact of safety‑net and community clinics, with a focus on **volunteer clinical time** and **delivered services**. The tool is static (HTML/JS only) and can be hosted on GitHub Pages or any static site host.
 
